@@ -182,7 +182,13 @@ def build():
     # GemFall logo glyphs (font gemfall:icons): \uE100 big (tab header), \uE101 small (inline, scoreboard)
     idir = os.path.join(A, "gemfall/textures/font"); os.makedirs(idir, exist_ok=True)
     emblem_glyph(128).save(os.path.join(idir, "emblem_big.png")); emblem_glyph(64).save(os.path.join(idir, "emblem_small.png"))
+    import sys as _s; _s.path.insert(0, os.path.join(ROOT, "tools")); import icons as _ic
+    strip = Image.new("RGBA", (8 * len(_ic.ORDER), 8), (0, 0, 0, 0))
+    for i, n in enumerate(_ic.ORDER): strip.alpha_composite(_ic.render(n), (8 * i, 0))
+    strip.save(os.path.join(idir, "icons8.png"))
+    ICON_CHARS = "".join(chr(0xE110 + i) for i in range(len(_ic.ORDER)))
     w("assets/gemfall/font/icons.json", {"providers": [
+        {"type": "bitmap", "file": "gemfall:font/icons8.png", "ascent": 7, "height": 8, "chars": [ICON_CHARS]},
         {"type": "bitmap", "file": "gemfall:font/emblem_big.png", "ascent": 8, "height": 36, "chars": ["\uE100"]},
         {"type": "bitmap", "file": "gemfall:font/emblem_small.png", "ascent": 8, "height": 9, "chars": ["\uE101"]}]})
     w("assets/stark/models/item/trim.json", cube_model("stark:item/trim")); item_def("trim")

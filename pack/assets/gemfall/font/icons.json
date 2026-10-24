@@ -2,6 +2,15 @@
   "providers": [
     {
       "type": "bitmap",
+      "file": "gemfall:font/icons8.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
       "file": "gemfall:font/emblem_big.png",
       "ascent": 8,
       "height": 36,
