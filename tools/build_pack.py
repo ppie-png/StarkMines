@@ -128,11 +128,43 @@ def gui_background(rows):
         d.rectangle([x, y, x + 17, y + 17], fill=GUI["slotrim"]); d.rectangle([x + 1, y + 1, x + 16, y + 16], fill=GUI["slot"])
     return im
 
+def ring_tri(invert=False):
+    """triangle (base bottom, apex top-centre) carrying Saturn-like ring bands along v"""
+    S = 64; im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); px = im.load(); rng = random.Random(5)
+    streak = [rng.uniform(-1, 1) for _ in range(S)]
+    for y in range(S):
+        v = (S - 1 - y) / (S - 1)                 # 0 at base, 1 at apex
+        r = 1 - v if invert else v                # r = 0 inner edge ... 1 outer edge
+        half = (1 - v) * S / 2 + 1
+        for x in range(S):
+            if abs(x + .5 - S / 2) > half: continue
+            if r < .06: c = (255, 236, 150, 255)                                   # inner gold edge
+            elif r < .30: c = (205, 175, 255, 150 + int(30 * streak[y]))           # lavender band
+            elif r < .36: c = (120, 90, 200, 40)                                   # cassini gap
+            elif r < .80: t = (r - .36) / .44; c = (int(255 - 40 * t), int(190 - 20 * t), 255, int(135 - 45 * t + 25 * streak[y]))
+            elif r < .94: c = (255, 205, 245, 70)
+            else: c = (255, 230, 140, 230)                                          # outer gold edge
+            px[x, y] = c
+    return im
+def glow_sprite():
+    S = 64; im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); px = im.load()
+    for y in range(S):
+        for x in range(S):
+            d = math.hypot(x + .5 - S / 2, y + .5 - S / 2) / (S / 2)
+            if d >= 1: continue
+            a = (1 - d) ** 2.2
+            c = lerp((255, 245, 255), (200, 120, 255), min(1, d * 1.4))
+            px[x, y] = (c[0], c[1], c[2], int(200 * a))
+    return im
+def emblem_glyph(size):
+    src = os.path.join(ROOT, "branding", "emblem_512.png")
+    return Image.open(src).convert("RGBA").resize((size, size), Image.LANCZOS)
+
 def build():
     if os.path.isdir(P): shutil.rmtree(P)
     os.makedirs(A, exist_ok=True)
-    w("pack.mcmeta", {"pack": {"description": [{"text": "Stark Network", "color": "#9BF6FF", "bold": True},
-                                               {"text": "\nTiefenrausch resource pack", "color": "#BDB2FF"}],
+    w("pack.mcmeta", {"pack": {"description": [{"text": "◆ GemFall", "color": "#FFC6FF", "bold": True},
+                                               {"text": "\nCrystals, menus & models", "color": "#BDB2FF"}],
                                "min_format": [97, 0], "max_format": [97, 1]}})
     # crystal textures + models
     tdir = os.path.join(A, "stark/textures/item"); os.makedirs(tdir, exist_ok=True)
@@ -143,6 +175,16 @@ def build():
             name = f"facet_{shape}{suf}"
             w(f"assets/stark/models/item/{name}.json", plane_model(f"stark:item/{name}")); item_def(name)
     gold_trim().save(os.path.join(tdir, "trim.png"))
+    ring_tri(False).save(os.path.join(tdir, "ring_tri.png")); ring_tri(True).save(os.path.join(tdir, "ring_tri_inv.png"))
+    glow_sprite().save(os.path.join(tdir, "glow.png"))
+    for name in ("ring_tri", "ring_tri_inv", "glow"):
+        w(f"assets/stark/models/item/{name}.json", plane_model(f"stark:item/{name}")); item_def(name)
+    # GemFall logo glyphs (font gemfall:icons): \uE100 big (tab header), \uE101 small (inline, scoreboard)
+    idir = os.path.join(A, "gemfall/textures/font"); os.makedirs(idir, exist_ok=True)
+    emblem_glyph(128).save(os.path.join(idir, "emblem_big.png")); emblem_glyph(64).save(os.path.join(idir, "emblem_small.png"))
+    w("assets/gemfall/font/icons.json", {"providers": [
+        {"type": "bitmap", "file": "gemfall:font/emblem_big.png", "ascent": 8, "height": 36, "chars": ["\uE100"]},
+        {"type": "bitmap", "file": "gemfall:font/emblem_small.png", "ascent": 8, "height": 9, "chars": ["\uE101"]}]})
     w("assets/stark/models/item/trim.json", cube_model("stark:item/trim")); item_def("trim")
     # GUI font: backgrounds + spaces
     gdir = os.path.join(A, "stark/textures/font/gui"); os.makedirs(gdir, exist_ok=True)
