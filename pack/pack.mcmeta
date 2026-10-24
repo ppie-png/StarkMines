@@ -1,0 +1,23 @@
+{
+  "pack": {
+    "description": [
+      {
+        "text": "Stark Network",
+        "color": "#9BF6FF",
+        "bold": true
+      },
+      {
+        "text": "\nTiefenrausch resource pack",
+        "color": "#BDB2FF"
+      }
+    ],
+    "min_format": [
+      97,
+      0
+    ],
+    "max_format": [
+      97,
+      1
+    ]
+  }
+}

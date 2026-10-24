@@ -1,0 +1,175 @@
+"""Builds the Stark Network resource pack from code (textures are generated, not hand-painted).
+python3 tools/build_pack.py  ->  pack/ (sources) + dist/StarkMines-pack.zip + dist/sha1.txt
+
+Contents
+  stark:facet_rect / facet_tri  crystal facet panels (purple)        - used by the Maw Crystal (item_display panels)
+  stark:facet_rect_core / _tri_core  bright inner facets
+  stark:trim                    polished gold bar                     - crystal rings
+  font stark:gui                GUI backgrounds + pixel-exact spaces  - custom chest menus (see docs/GUI.md)
+"""
+import json, os, math, random, shutil, zipfile, hashlib
+from PIL import Image, ImageDraw, ImageFilter
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+P = os.path.join(ROOT, "pack")
+A = os.path.join(P, "assets")
+
+def w(path, data):
+    path = os.path.join(P, path); os.makedirs(os.path.dirname(path), exist_ok=True)
+    if isinstance(data, (dict, list)): data = json.dumps(data, indent=2, ensure_ascii=False)
+    open(path, "w", encoding="utf-8").write(data)
+
+def lerp(a, b, t): return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(len(a)))
+
+# ------------------------------------------------------------------ crystal facet textures (64x64)
+PALETTES = {
+    "": dict(lo=(78, 34, 150, 150), hi=(226, 160, 255, 120), edge=(250, 232, 255, 255), glint=(255, 255, 255, 230)),
+    "_core": dict(lo=(255, 170, 235, 245), hi=(255, 246, 255, 255), edge=(255, 255, 255, 255), glint=(255, 255, 255, 255)),
+}
+def facet(shape, pal, seed):
+    S = 64; rng = random.Random(seed)
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); px = im.load()
+    def inside(x, y):
+        if shape == "rect": return True
+        # triangle: base along the bottom row, apex at the top centre
+        h = (S - 1 - y) / (S - 1)
+        half = (1 - h) * S / 2
+        return abs(x + .5 - S / 2) <= half
+    for y in range(S):
+        for x in range(S):
+            if not inside(x, y): continue
+            t = 1 - y / (S - 1)                                   # 0 bottom -> 1 top
+            c = lerp(pal["lo"], pal["hi"], t ** 1.2)
+            # soft vertical light streaks inside the crystal
+            s = .5 + .5 * math.sin(x * .21 + 1.3) * math.sin(x * .07 + y * .02)
+            c = lerp(c, pal["hi"], .25 * s)
+            px[x, y] = c
+    # crisp facet edges
+    d = ImageDraw.Draw(im)
+    if shape == "rect":
+        d.rectangle([0, 0, S - 1, S - 1], outline=pal["edge"], width=2)
+        d.line([(2, 2), (2, S - 3)], fill=lerp(pal["edge"], (255, 255, 255, 255), .5), width=1)
+    else:
+        d.line([(0, S - 1), (S / 2, 0)], fill=pal["edge"], width=2)
+        d.line([(S - 1, S - 1), (S / 2, 0)], fill=pal["edge"], width=2)
+        d.line([(0, S - 1), (S - 1, S - 1)], fill=pal["edge"], width=2)
+    # diagonal glints + sparkles
+    for k in range(2):
+        x0 = rng.randint(10, 40); y0 = rng.randint(14, 50)
+        for i in range(rng.randint(8, 14)):
+            x, y = x0 + i, y0 - i
+            if 0 <= x < S and 0 <= y < S and inside(x, y) and px[x, y][3]:
+                px[x, y] = lerp(px[x, y], pal["glint"], .7)
+    for k in range(6):
+        x, y = rng.randint(4, S - 5), rng.randint(4, S - 5)
+        if inside(x, y) and px[x, y][3]:
+            for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+                if inside(x + dx, y + dy): px[x + dx, y + dy] = pal["glint"] if (dx, dy) == (0, 0) else lerp(px[x + dx, y + dy], pal["glint"], .5)
+    return im
+
+def gold_trim():
+    im = Image.new("RGBA", (16, 16)); px = im.load()
+    for y in range(16):
+        for x in range(16):
+            t = abs(y - 5.5) / 10.5
+            px[x, y] = lerp((255, 246, 190, 255), (196, 120, 22, 255), min(1, t * 1.4))
+    for x in range(0, 16, 5): px[x, 4] = (255, 255, 255, 255)
+    return im
+
+def plane_model(tex):
+    return {"textures": {"0": tex, "particle": tex},
+            "elements": [{"from": [0, 0, 8], "to": [16, 16, 8], "shade": False, "light_emission": 15,
+                          "faces": {"north": {"uv": [0, 0, 16, 16], "texture": "#0"},
+                                    "south": {"uv": [0, 0, 16, 16], "texture": "#0"}}}]}
+def cube_model(tex):
+    f = {k: {"uv": [0, 0, 16, 16], "texture": "#0"} for k in ("north", "south", "east", "west", "up", "down")}
+    return {"textures": {"0": tex, "particle": tex},
+            "elements": [{"from": [0, 0, 0], "to": [16, 16, 16], "shade": False, "light_emission": 15, "faces": f}]}
+
+def item_def(name):
+    w(f"assets/stark/items/{name}.json", {"model": {"type": "minecraft:model", "model": f"stark:item/{name}"}})
+
+# ------------------------------------------------------------------ GUI backgrounds (chest, 176 wide)
+GUI = {"bg": (17, 20, 30, 252), "panel": (27, 31, 46, 255), "rim1": (155, 246, 255, 255), "rim2": (189, 178, 255, 255),
+       "slot": (12, 14, 22, 255), "slotrim": (54, 60, 84, 255), "text": (230, 237, 247, 255)}
+def gui_background(rows):
+    """6-row chest = 222 px tall (rows*18 + 17 top + 97 player inventory part + 14)"""
+    W = 176; H = 17 + rows * 18 + 14 + 83
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 0, W - 1, H - 1], radius=6, fill=GUI["bg"])
+    # gradient rim (cyan -> lavender, left to right)
+    for x in range(W):
+        c = lerp(GUI["rim1"], GUI["rim2"], x / (W - 1))
+        for y in (0, 1): im.putpixel((x, y), c)
+        for y in (H - 2, H - 1): im.putpixel((x, y), lerp(c, (0, 0, 0, 255), .35))
+    for y in range(H):
+        for x in (0, 1, W - 2, W - 1):
+            im.putpixel((x, y), lerp(lerp(GUI["rim1"], GUI["rim2"], x / (W - 1)), (0, 0, 0, 255), .25 * y / H))
+    # title bar
+    d.rectangle([3, 3, W - 4, 15], fill=(36, 41, 61, 255))
+    # menu slot area
+    top = 17
+    d.rounded_rectangle([5, top - 1, W - 6, top + rows * 18 + 1], radius=3, fill=GUI["panel"])
+    for r in range(rows):
+        for c in range(9):
+            x, y = 7 + c * 18, top + r * 18
+            d.rectangle([x, y, x + 17, y + 17], fill=GUI["slotrim"])
+            d.rectangle([x + 1, y + 1, x + 16, y + 16], fill=GUI["slot"])
+    # player inventory label line + slots
+    py = top + rows * 18 + 14
+    for x in range(8, W - 8):
+        im.putpixel((x, py - 4), lerp((60, 66, 92, 255), (40, 44, 64, 255), abs(x - W / 2) / (W / 2)))
+    for r in range(3):
+        for c in range(9):
+            x, y = 7 + c * 18, py + r * 18
+            d.rectangle([x, y, x + 17, y + 17], fill=GUI["slotrim"]); d.rectangle([x + 1, y + 1, x + 16, y + 16], fill=GUI["slot"])
+    for c in range(9):
+        x, y = 7 + c * 18, py + 58
+        d.rectangle([x, y, x + 17, y + 17], fill=GUI["slotrim"]); d.rectangle([x + 1, y + 1, x + 16, y + 16], fill=GUI["slot"])
+    return im
+
+def build():
+    if os.path.isdir(P): shutil.rmtree(P)
+    os.makedirs(A, exist_ok=True)
+    w("pack.mcmeta", {"pack": {"description": [{"text": "Stark Network", "color": "#9BF6FF", "bold": True},
+                                               {"text": "\nTiefenrausch resource pack", "color": "#BDB2FF"}],
+                               "min_format": [97, 0], "max_format": [97, 1]}})
+    # crystal textures + models
+    tdir = os.path.join(A, "stark/textures/item"); os.makedirs(tdir, exist_ok=True)
+    for suf, pal in PALETTES.items():
+        facet("rect", pal, 3).save(os.path.join(tdir, f"facet_rect{suf}.png"))
+        facet("tri", pal, 7).save(os.path.join(tdir, f"facet_tri{suf}.png"))
+        for shape in ("rect", "tri"):
+            name = f"facet_{shape}{suf}"
+            w(f"assets/stark/models/item/{name}.json", plane_model(f"stark:item/{name}")); item_def(name)
+    gold_trim().save(os.path.join(tdir, "trim.png"))
+    w("assets/stark/models/item/trim.json", cube_model("stark:item/trim")); item_def("trim")
+    # GUI font: backgrounds + spaces
+    gdir = os.path.join(A, "stark/textures/font/gui"); os.makedirs(gdir, exist_ok=True)
+    gui_background(6).save(os.path.join(gdir, "panel_6.png"))
+    gui_background(3).save(os.path.join(gdir, "panel_3.png"))
+    spaces = {"": -1, "": -2, "": -4, "": -8, "": -16, "": -32, "": -64, "": -128,
+              "": 1, "": 2, "": 4, "": 8, "": 16, "": 32, "": 64, "": 128}
+    h6 = gui_background(6).size[1]; h3 = gui_background(3).size[1]
+    w("assets/stark/font/gui.json", {"providers": [
+        {"type": "space", "advances": spaces},
+        {"type": "bitmap", "file": "stark:font/gui/panel_6.png", "ascent": 13, "height": h6, "chars": [""]},
+        {"type": "bitmap", "file": "stark:font/gui/panel_3.png", "ascent": 13, "height": h3, "chars": [""]},
+    ]})
+    shutil.copy(os.path.join(ROOT, "tools", "pack.png"), os.path.join(P, "pack.png")) if os.path.exists(os.path.join(ROOT, "tools", "pack.png")) else None
+    # zip (deterministic order + timestamps so the sha1 only changes when content changes)
+    os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
+    zp = os.path.join(ROOT, "dist", "StarkMines-pack.zip")
+    with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
+        for base, dirs, files in sorted(os.walk(P)):
+            dirs.sort()
+            for f in sorted(files):
+                full = os.path.join(base, f); arc = os.path.relpath(full, P).replace(os.sep, "/")
+                zi = zipfile.ZipInfo(arc, date_time=(2026, 1, 1, 0, 0, 0)); zi.compress_type = zipfile.ZIP_DEFLATED
+                z.writestr(zi, open(full, "rb").read())
+    sha = hashlib.sha1(open(zp, "rb").read()).hexdigest()
+    open(os.path.join(ROOT, "dist", "sha1.txt"), "w").write(sha + "\n")
+    print(zp, os.path.getsize(zp), sha)
+
+if __name__ == "__main__":
+    build()
