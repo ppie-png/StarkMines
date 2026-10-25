@@ -23,8 +23,8 @@ def lerp(a, b, t): return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in ra
 
 # ------------------------------------------------------------------ crystal facet textures (64x64)
 PALETTES = {
-    "": dict(lo=(78, 34, 150, 150), hi=(226, 160, 255, 120), edge=(250, 232, 255, 255), glint=(255, 255, 255, 230)),
-    "_core": dict(lo=(255, 170, 235, 245), hi=(255, 246, 255, 255), edge=(255, 255, 255, 255), glint=(255, 255, 255, 255)),
+    "": dict(lo=(88, 40, 160, 190), hi=(222, 168, 255, 160), edge=(236, 214, 255, 120), glint=(255, 255, 255, 220)),
+    "_core": dict(lo=(255, 170, 235, 245), hi=(255, 246, 255, 255), edge=(255, 236, 252, 170), glint=(255, 255, 255, 255)),
 }
 def facet(shape, pal, seed):
     S = 64; rng = random.Random(seed)
@@ -44,15 +44,18 @@ def facet(shape, pal, seed):
             s = .5 + .5 * math.sin(x * .21 + 1.3) * math.sin(x * .07 + y * .02)
             c = lerp(c, pal["hi"], .25 * s)
             px[x, y] = c
-    # crisp facet edges
-    d = ImageDraw.Draw(im)
-    if shape == "rect":
-        d.rectangle([0, 0, S - 1, S - 1], outline=pal["edge"], width=2)
-        d.line([(2, 2), (2, S - 3)], fill=lerp(pal["edge"], (255, 255, 255, 255), .5), width=1)
-    else:
-        d.line([(0, S - 1), (S / 2, 0)], fill=pal["edge"], width=2)
-        d.line([(S - 1, S - 1), (S / 2, 0)], fill=pal["edge"], width=2)
-        d.line([(0, S - 1), (S - 1, S - 1)], fill=pal["edge"], width=2)
+    # soft facet edges: a thin highlight blended into the body (no hard outline -> no "sketch" look)
+    edge = pal["edge"]
+    for y in range(S):
+        for x in range(S):
+            if not px[x, y][3]: continue
+            if shape == "rect": dist = min(x, y, S - 1 - x, S - 1 - y)
+            else:
+                h = (S - 1 - y) / (S - 1); half = (1 - h) * S / 2
+                dist = min(S - 1 - y, (half - abs(x + .5 - S / 2)) * .9)
+            if dist < 2.5:
+                k = (1 - dist / 2.5) * edge[3] / 255
+                px[x, y] = lerp(px[x, y], edge[:3] + (max(px[x, y][3], edge[3]),), k * .8)
     # diagonal glints + sparkles
     for k in range(2):
         x0 = rng.randint(10, 40); y0 = rng.randint(14, 50)
@@ -146,6 +149,57 @@ def ring_tri(invert=False):
             else: c = (255, 230, 140, 230)                                          # outer gold edge
             px[x, y] = c
     return im
+def ring_disc(S=512):
+    """whole Saturn band on one plane: soft radial bands + clumps/sparkles that vary with the angle so the spin is visible"""
+    rng = random.Random(11); im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); px = im.load()
+    RIN = 7.6 / 12.6
+    clumps = [(rng.uniform(0, 2 * math.pi), rng.uniform(.25, .6), rng.uniform(.62, .98)) for _ in range(7)]
+    def ang_mod(a, r):
+        m = .78 + .12 * math.sin(3 * a + 1.1) + .08 * math.sin(7 * a + r * 9)
+        for (a0, w, rc) in clumps:
+            da = (a - a0 + math.pi) % (2 * math.pi) - math.pi
+            m += .95 * math.exp(-(da / w) ** 2) * math.exp(-((r - rc) / .13) ** 2)
+        return m
+    def band(t):
+        """t = 0 inner edge .. 1 outer edge -> (rgb, alpha)"""
+        def sm(a, b, x): return max(0, min(1, (x - a) / (b - a)))
+        a = 0
+        a += .95 * math.exp(-((t - .015) / .02) ** 2)                        # inner gold rim
+        a += .62 * sm(.04, .09, t) * (1 - sm(.30, .34, t))                   # inner band
+        a += .12 * sm(.34, .36, t) * (1 - sm(.39, .41, t))                   # cassini gap (faint)
+        a += .55 * sm(.41, .46, t) * (1 - sm(.80, .86, t)) * (.85 + .15 * math.sin(t * 60))
+        a += .28 * sm(.86, .88, t) * (1 - sm(.95, .97, t))                   # faint outer band
+        a += .85 * math.exp(-((t - .985) / .018) ** 2)                       # outer gold rim
+        gold = (255, 214, 110); lav = (178, 132, 255); pink = (255, 150, 230)
+        if t < .04 or t > .955: c = gold
+        elif t < .36: c = lerp(lav, pink, t / .36)
+        else: c = lerp(pink, lav, (t - .36) / .6)
+        return c, min(1, a)
+    for y in range(S):
+        for x in range(S):
+            dx, dy = (x + .5) / S * 2 - 1, (y + .5) / S * 2 - 1
+            r = math.hypot(dx, dy)
+            if r > 1 or r < RIN - .01: continue
+            t = (r - RIN) / (1 - RIN)
+            c, a = band(max(0, min(1, t)))
+            ang = math.atan2(dy, dx)
+            m = ang_mod(ang, t) if .03 < t < .96 else 1
+            a = a * min(1.5, m) * (.92 + .08 * rng.random())
+            c = lerp(c, (255, 250, 255), min(1, max(0, m - .95) * 1.3))
+            if a > .003: px[x, y] = c + (int(255 * min(1, a) * .9),)
+    # sparkles: bright 4-point stars, denser inside the clumps
+    for _ in range(140):
+        a0, w, rc = rng.choice(clumps) if rng.random() < .6 else (rng.uniform(0, 2 * math.pi), 3, rng.uniform(.05, .95))
+        ang = a0 + rng.gauss(0, w * .6); t = min(.95, max(.05, rc + rng.gauss(0, .06)))
+        r = RIN + t * (1 - RIN)
+        cx, cy = int((math.cos(ang) * r + 1) / 2 * S), int((math.sin(ang) * r + 1) / 2 * S)
+        L = rng.choice((1, 2, 2, 3))
+        for dx, dy in [(0, 0)] + [(i, 0) for i in range(-L, L + 1)] + [(0, i) for i in range(-L, L + 1)]:
+            X, Y = cx + dx, cy + dy
+            if 0 <= X < S and 0 <= Y < S:
+                k = 1 - (abs(dx) + abs(dy)) / (L + 1)
+                o = px[X, Y]; px[X, Y] = lerp(o if o[3] else (255, 255, 255, 0), (255, 255, 255, 255), k)
+    return im
 def glow_sprite():
     S = 64; im = Image.new("RGBA", (S, S), (0, 0, 0, 0)); px = im.load()
     for y in range(S):
@@ -177,7 +231,8 @@ def build():
     gold_trim().save(os.path.join(tdir, "trim.png"))
     ring_tri(False).save(os.path.join(tdir, "ring_tri.png")); ring_tri(True).save(os.path.join(tdir, "ring_tri_inv.png"))
     glow_sprite().save(os.path.join(tdir, "glow.png"))
-    for name in ("ring_tri", "ring_tri_inv", "glow"):
+    ring_disc().save(os.path.join(tdir, "ring_disc.png"))
+    for name in ("ring_tri", "ring_tri_inv", "glow", "ring_disc"):
         w(f"assets/stark/models/item/{name}.json", plane_model(f"stark:item/{name}")); item_def(name)
     # GemFall logo glyphs (font gemfall:icons): \uE100 big (tab header), \uE101 small (inline, scoreboard)
     idir = os.path.join(A, "gemfall/textures/font"); os.makedirs(idir, exist_ok=True)
