@@ -258,7 +258,16 @@ def build():
         {"type": "space", "advances": spaces},
         {"type": "bitmap", "file": "stark:font/gui/panel_6.png", "ascent": 13, "height": h6, "chars": [""]},
         {"type": "bitmap", "file": "stark:font/gui/panel_3.png", "ascent": 13, "height": h3, "chars": [""]},
+        {"type": "bitmap", "file": "stark:font/gui/panel_lift.png", "ascent": 13, "height": 168, "chars": ["\ue002"]},
+        # titles that inherit this font still render as normal text (fixes the empty boxes in menu titles)
+        {"type": "reference", "id": "minecraft:default"},
     ]})
+    import elevator_gui as _eg
+    _eg.panel().save(os.path.join(gdir, "panel_lift.png"))
+    for k in ("on", "off", "lock", "event"):
+        _eg.lamp(k).save(os.path.join(tdir, f"lamp_{k}.png"))
+        w(f"assets/stark/models/item/lamp_{k}.json", {"parent": "minecraft:item/generated", "textures": {"layer0": f"stark:item/lamp_{k}"}}); item_def(f"lamp_{k}")
+    w("assets/stark/models/item/blank.json", {"textures": {}, "elements": []}); item_def("blank")
     shutil.copy(os.path.join(ROOT, "tools", "pack.png"), os.path.join(P, "pack.png")) if os.path.exists(os.path.join(ROOT, "tools", "pack.png")) else None
     # zip (deterministic order + timestamps so the sha1 only changes when content changes)
     os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)

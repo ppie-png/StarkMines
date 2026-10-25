@@ -38,6 +38,19 @@
       "chars": [
         ""
       ]
+    },
+    {
+      "type": "bitmap",
+      "file": "stark:font/gui/panel_lift.png",
+      "ascent": 13,
+      "height": 168,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
     }
   ]
 }
