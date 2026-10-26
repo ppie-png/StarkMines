@@ -11,7 +11,8 @@ PAL = {".": None, "k": (34, 20, 46), "w": (255, 255, 255), "y": (255, 216, 77), 
        "a": (252, 214, 70), "A": (255, 244, 170), "e": (196, 140, 20),       # gold
        "d": (93, 236, 245), "D": (210, 255, 255), "E": (30, 160, 180),       # diamond
        "m": (255, 150, 230), "M": (255, 255, 255), "q": (160, 110, 255),     # mythic crystal
-       "h": (255, 255, 255), "H": (200, 200, 200), "j": (150, 150, 150)}     # neutral (tinted by text colour)
+       "h": (255, 255, 255), "H": (200, 200, 200), "j": (150, 150, 150),
+       "u": (240, 64, 72), "U": (168, 32, 48)}                               # media red     # neutral (tinted by text colour)
 ICONS = {
  "coin": ["..kkkk..", ".kyYYyk.", "kyYyyoyk", "kyYyyoyk", "kyyyyoyk", "kyyoooyk", ".kyyyyk.", "..kkkk.."],
  "gem":  ["..kkkk..", ".kPPpvk.", "kPPpppvk", "kkkkkkkk", ".kppppk.", "..kpvk..", "...kk...", "........"],
@@ -31,9 +32,11 @@ ICONS = {
  "pick_diamond": ["kkkkkk..", "kDDdddk.", ".kkkkdEk", "...knkEk", "..knk.kk", ".knk....", "knk.....", "kk......"],
  "pick_mythic":  ["kkkkkkM.", "kMMmmqkM", ".kkkkmqk", "...kqkqk", "..kqk.kk", ".kqk....", "kqk...M.", "kk......"],
  "shield":       ["kkkkkkkk", "khhhhHjk", "khhhhHjk", "khhhhHjk", ".khhHjk.", ".khHHjk.", "..khjk..", "...kk..."],
+ "camera": ["........", "kkkkk.kk", "kuwuukUk", "kuuuuUUk", "kuuuuUUk", "kUUUUkUk", "kkkkk.kk", "........"],
+ "phone":  [".kkkkkk.", ".kcccck.", ".kcwcck.", ".klwwlk.", ".kpwppk.", ".kppppk.", ".kkkkkk.", "..kkkk.."],
  "trophy": ["kkkkkkkk", "kYyyyyok", "kyyyyyok", ".kyyyok.", "..kyok..", "...ko...", "..kyyk..", ".kkkkkk."],
 }
-ORDER = ["coin", "gem", "star", "crown", "signal", "people", "pick", "clock", "medal1", "medal2", "medal3", "trophy", "pick_wood", "pick_stone", "pick_iron", "pick_gold", "pick_diamond", "pick_mythic", "shield"]
+ORDER = ["coin", "gem", "star", "crown", "signal", "people", "pick", "clock", "medal1", "medal2", "medal3", "trophy", "pick_wood", "pick_stone", "pick_iron", "pick_gold", "pick_diamond", "pick_mythic", "shield", "camera", "phone"]
 def render(name):
     im = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
     for y, row in enumerate(ICONS[name]):
